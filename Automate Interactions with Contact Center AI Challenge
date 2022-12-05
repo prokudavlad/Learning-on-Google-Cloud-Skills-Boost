@@ -1,0 +1,86 @@
+
+Task 1: Create a Cloud Storage Bucket
+
+
+gsutil mb -l us-east1 gs://8784e331-d567-46ac-81f9-d04d9464d246/
+
+ 
+
+Task 2: Create a Cloud Function
+
+
+Go to the “saf-longrun-job-func” directory
+
+cd dataflow-contact-center-speech-analysis/saf-longrun-job-func
+gcloud functions deploy safLongRunJobFunc --runtime nodejs12 --trigger-resource 8784e331-d567-46ac-81f9-d04d9464d246 --region us-east1 --trigger-event google.storage.object.finalize
+
+
+
+
+Task 3: Create a BigQuery Dataset and Table
+# To create the dataset
+bq mk saf_285
+
+
+
+ 
+
+Task 4: Create Cloud Pub/Sub Topic
+gcloud pubsub topics create saf-topic-550
+
+
+
+
+Task 5: Create a Cloud Storage Bucket for Staging Contents
+gsutil mb -l us-east1 gs://2e7bf262-e257-44e7-b4a4-f2e31a05d020/
+Create a folder “DFaudio” in the bucket
+
+Need to do it manually
+
+
+
+
+Task 6: Deploy a Cloud Dataflow Pipeline
+Go to the saf-longrun-job-dataflow directory
+
+
+python -m virtualenv env -p python3
+source env/bin/activate
+pip install apache-beam[gcp]
+pip install dateparser
+
+
+Now, execute the command given below:
+python saflongrunjobdataflow.py \
+--project=qwiklabs-gcp-01-7def5e8a7b3c \
+--region=us-east1 \
+--input_topic=projects/qwiklabs-gcp-01-7def5e8a7b3c/topics/saf-topic-550 \
+--runner=DataflowRunner \
+--temp_location=gs://8784e331-d567-46ac-81f9-d04d9464d246/DFaudio-249 \
+--output_bigquery=qwiklabs-gcp-01-7def5e8a7b3c:saf_285.transcripts \
+--requirements_file=requirements.txt
+
+
+
+
+
+Task 7: Upload Sample Audio Files for Processing
+gsutil -h x-goog-meta-callid:1234567 -h x-goog-meta-stereo:false -h x-goog-meta-pubsubtopicname:saf-topic-550 -h x-goog-meta-year:2019 -h x-goog-meta-month:11 -h x-goog-meta-day:06 -h x-goog-meta-starttime:1116 cp gs://qwiklabs-bucket-gsp311/speech_commercial_mono.flac gs://8784e331-d567-46ac-81f9-d04d9464d246
+
+
+gsutil -h x-goog-meta-callid:1234567 -h x-goog-meta-stereo:true -h x-goog-meta-pubsubtopicname:saf-topic-550 -h x-goog-meta-year:2019 -h x-goog-meta-month:11 -h x-goog-meta-day:06 -h x-goog-meta-starttime:1116 cp gs://qwiklabs-bucket-gsp311/speech_commercial_stereo.wav gs://8784e331-d567-46ac-81f9-d04d9464d246
+
+
+After performing Task 7: Upload Sample Audio Files for Processing, we have to wait....until we see output in bigquery > dataset > table.
+
+
+
+
+
+Task 8: Run a Data Loss Prevention Job
+
+
+
+select * from (SELECT entities.name,entities.type, COUNT(entities.name) AS count FROM dataset_name.transcripts, UNNEST(entities) entities GROUP BY entities.name, entities.type ORDER BY count ASC ) Where count > 5
+
+

@@ -1,0 +1,106 @@
+gsutil cp gs://spls/gsp335/gsp335.zip .
+
+unzip gsp335.zip
+
+Task 1 ::==> Setup cluster
+
+gcloud container clusters create <cluster-name> \
+   --zone us-central1-c \
+   --machine-type n1-standard-4 \
+   --num-nodes 2 \
+   --enable-network-policy
+
+Create the Cloud SQL instance:
+
+gcloud sql instances create <your-sql-instance-name> --region us-central1
+
+Task 2 ::==> Setup wordpress
+
+gcloud iam service-accounts create <your-service-account-credentials>
+
+gcloud projects add-iam-policy-binding $DEVSHELL_PROJECT_ID \
+   --member="serviceAccount:<your-service-account-credentials>@$DEVSHELL_PROJECT_ID.iam.gserviceaccount.com" \
+   --role="roles/cloudsql.client"
+
+gcloud iam service-accounts keys create key.json --iam-account=<your-service-account-credentials>@$DEVSHELL_PROJECT_ID.iam.gserviceaccount.com
+
+kubectl create secret generic cloudsql-instance-credentials --from-file key.json
+
+kubectl create secret generic cloudsql-db-credentials \
+   --from-literal username=wordpress \
+   --from-literal password=''
+
+kubectl create -f volume.yaml
+
+kubectl apply -f wordpress.yaml
+
+Task 3 ::==> Setup Ingress with TLS
+
+helm version
+
+helm repo add stable https://charts.helm.sh/stable
+
+helm repo update
+
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+
+
+helm install nginx-ingress stable/nginx-ingress --set rbac.create=true
+
+kubectl get service nginx-ingress-controller
+
+. add_ip.sh
+
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.16.0/cert-manager.yaml
+
+kubectl create clusterrolebinding cluster-admin-binding \
+   --clusterrole=cluster-admin \
+   --user=$(gcloud config get-value core/account)
+
+kubectl apply -f issuer.yaml
+kubectl apply -f ingress.yaml
+
+Task 4 ::==> Set up Network Policy
+
+nano network-policy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+name: allow-nginx-access-to-internet
+spec:
+podSelector:
+matchLabels:
+    app: nginx-ingress
+policyTypes:
+- Ingress
+ingress:
+- {}
+
+kubectl apply -f network-policy.yaml
+
+Task 5 ::==> Setup Binary Authorization
+
+- Goto Cloud Console -> Security -> Binary Authorization.
+- Enable the Binary Authorization API.
+- On Binary Authorization page, click CONFIGURE POLICY.
+- Select Disallow all images for the Default rule.
+- Scroll down to Images exempt from this policy, click ADD IMAGE PATH and paste
+
+docker.io/library/wordpress:latest
+
+us.gcr.io/k8s-artifacts-prod/ingress-nginx/*
+gcr.io/cloudsql-docker/*
+quay.io/jetstack/*
+
+Task 6 ::==> Setup Pod Security Policy
+
+nano psp-restrictive.yaml
+
+kubectl apply -f psp-role.yaml
+kubectl apply -f pop-use.yaml
+kubectl apply -f psp-restrictive.yaml
+
+

@@ -1,0 +1,11 @@
+resource.labels.cluster_name="cloud-ops-sandbox" AND resource.labels.namespace_name="default" AND resource.type="k8s_container" AND labels.k8s-pod/app="recommendationservice" AND severity>=ERROR
+
+
+
+kubectl set env deployment/recommendationservice MAX_RESPONSES-
+
+kubectl delete pod $(kubectl get pod -l app=recommendationservice -o jsonpath='{.items[0].metadata.name}')
+
+
+kubectl wait --for=condition=available --timeout=600s deployment/recommendationservice
+
